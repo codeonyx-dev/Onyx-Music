@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { ListMusic, X, GripVertical, Trash2 } from 'lucide-react';
 import AlbumArt from './AlbumArt';
+import { songRef } from '../utils/songKey';
 import { formatTime } from '../utils/format';
 
 function QueuePanel({
@@ -47,7 +48,7 @@ function QueuePanel({
             <ul className="divide-y divide-onyx-border">
               {queue.map((song, index) => (
                 <li
-                  key={`${song.filename}-${index}`}
+                  key={`${songRef(song)}-${index}`}
                   draggable
                   onDragStart={() => handleDragStart(index)}
                   onDragOver={(e) => handleDragOver(e, index)}
@@ -62,7 +63,7 @@ function QueuePanel({
                     onClick={() => onPlayAtIndex(index)}
                     className="flex items-center gap-2 flex-1 min-w-0 text-left"
                   >
-                    <AlbumArt filename={song.filename} size="sm" />
+                    <AlbumArt mediaRef={songRef(song)} size="sm" />
                     <div className="min-w-0 flex-1">
                       <p className={`text-sm truncate ${index === queueIndex ? 'text-white font-medium' : 'text-onyx-text'}`}>
                         {song.title}

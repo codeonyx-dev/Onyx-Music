@@ -56,10 +56,12 @@ function withToken(url) {
   return `${url}${sep}token=${encodeURIComponent(token)}`;
 }
 
-export function streamUrl(filename) {
-  return withToken(`${API_URL}/api/stream/${encodeURIComponent(filename)}`);
+/** @param {string} ref - song id or relative path */
+export function streamUrl(ref) {
+  return withToken(`${API_URL}/api/stream/${encodeURIComponent(ref)}`);
 }
 
-export function coverUrl(filename) {
-  return withToken(`${API_URL}/api/cover/${encodeURIComponent(filename)}`);
+/** @param {string} ref - song id or relative path */
+export function coverUrl(ref) {
+  return withToken(`${API_URL}/api/cover/${encodeURIComponent(ref)}`);
 }

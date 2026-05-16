@@ -6,6 +6,7 @@ import {
   saveFavorites,
   createPlaylistId,
 } from '../storage/userLibrary';
+import { songRef, matchesRef } from '../utils/songKey';
 
 export function useLibrary(username) {
   const [view, setView] = useState({ type: 'library' });
@@ -87,16 +88,26 @@ export function useLibrary(username) {
   );
 
   const toggleFavorite = useCallback(
-    (filename) => {
-      const next = favorites.includes(filename)
-        ? favorites.filter((f) => f !== filename)
-        : [...favorites, filename];
+    (songOrRef) => {
+      const ref = typeof songOrRef === 'string' ? songOrRef : songRef(songOrRef);
+      const isFav =
+        typeof songOrRef === 'string'
+          ? favorites.includes(ref)
+          : favorites.some((f) => matchesRef(f, songOrRef));
+      const next = isFav
+        ? favorites.filter((f) =>
+            typeof songOrRef === 'string' ? f !== ref : !matchesRef(f, songOrRef)
+          )
+        : [...favorites, ref];
       persistFavorites(next);
     },
     [favorites, persistFavorites]
   );
 
-  const isFavorite = useCallback((filename) => favorites.includes(filename), [favorites]);
+  const isFavorite = useCallback(
+    (song) => favorites.some((f) => matchesRef(f, song)),
+    [favorites]
+  );
 
   const toggleSelect = useCallback((filename) => {
     setSelected((prev) => {
@@ -113,32 +124,55 @@ export function useLibrary(username) {
 
   const clearSelection = useCallback(() => setSelected(new Set()), []);
 
-  const getViewTitle = useCallback(() => {
-    if (view.type === 'library') return 'Tu Biblioteca';
-    if (view.type === 'favorites') return 'Favoritos';
-    if (view.type === 'playlist') {
-      const pl = playlists.find((p) => p.id === view.id);
-      return pl ? pl.name : 'Lista';
-    }
-    return 'Biblioteca';
-  }, [view, playlists]);
+  const getViewTitle = useCallback(
+    (artists = [], albums = []) => {
+      if (view.type === 'library') return 'Tu Biblioteca';
+      if (view.type === 'favorites') return 'Favoritos';
+      if (view.type === 'artists') return 'Artistas';
+      if (view.type === 'artist') {
+        const a = artists.find((x) => x.id === view.id);
+        return a ? a.name : 'Artista';
+      }
+      if (view.type === 'album') {
+        const al = albums.find((x) => x.id === view.id);
+        return al ? al.name : 'Álbum';
+      }
+      if (view.type === 'playlist') {
+        const pl = playlists.find((p) => p.id === view.id);
+        return pl ? pl.name : 'Lista';
+      }
+      return 'Biblioteca';
+    },
+    [view, playlists]
+  );
 
   const filterSongs = useCallback(
     (allSongs) => {
       if (view.type === 'library') return allSongs;
       if (view.type === 'favorites') {
-        return allSongs.filter((s) => favorites.includes(s.filename));
+        return allSongs.filter((s) => favorites.some((f) => matchesRef(f, s)));
+      }
+      if (view.type === 'artist') {
+        return allSongs.filter((s) => s.artist_id === view.id);
+      }
+      if (view.type === 'album') {
+        return allSongs.filter((s) => s.album_id === view.id);
       }
       if (view.type === 'playlist') {
         const pl = playlists.find((p) => p.id === view.id);
         if (!pl) return [];
         return pl.songs
-          .map((f) => allSongs.find((s) => s.filename === f))
+          .map((f) => allSongs.find((s) => matchesRef(f, s)))
           .filter(Boolean);
       }
       return allSongs;
     },
     [view, favorites, playlists]
+  );
+
+  const albumsForArtist = useCallback(
+    (artistId, allAlbums) => allAlbums.filter((a) => a.artist_id === artistId),
+    []
   );
 
   return {
@@ -158,5 +192,7 @@ export function useLibrary(username) {
     clearSelection,
     getViewTitle,
     filterSongs,
+    albumsForArtist,
+    songRef,
   };
 }

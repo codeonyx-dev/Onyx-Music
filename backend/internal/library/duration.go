@@ -1,4 +1,4 @@
-package main
+package library
 
 import (
 	"io"
@@ -7,7 +7,6 @@ import (
 	"strings"
 )
 
-// kbps MPEG1 Layer III (version 1, layer 3)
 var mpeg1Layer3Bitrates = [16]int{
 	0, 32, 40, 48, 56, 64, 80, 96, 112, 128, 160, 192, 224, 256, 320, 0,
 }
@@ -18,16 +17,12 @@ func audioDuration(filePath string, fileSize int64) float64 {
 			fileSize = info.Size()
 		}
 	}
-	ext := strings.ToLower(filepath.Ext(filePath))
-	switch ext {
-	case ".mp3":
+	if strings.ToLower(filepath.Ext(filePath)) == ".mp3" {
 		return mp3DurationEstimate(filePath, fileSize)
-	default:
-		return 0
 	}
+	return 0
 }
 
-// mp3DurationEstimate calcula duración sin recorrer todo el archivo.
 func mp3DurationEstimate(filePath string, fileSize int64) float64 {
 	if fileSize <= 0 {
 		return 0
@@ -121,17 +116,13 @@ func xingDuration(data []byte) float64 {
 		}
 		flags := int(data[i+4])<<24 | int(data[i+5])<<16 | int(data[i+6])<<8 | int(data[i+7])
 		off := i + 8
-		if flags&0x01 == 0 {
-			continue
-		}
-		if off+4 > len(data) {
+		if flags&0x01 == 0 || off+4 > len(data) {
 			continue
 		}
 		frames := int(data[off])<<24 | int(data[off+1])<<16 | int(data[off+2])<<8 | int(data[off+3])
 		if frames <= 0 {
 			continue
 		}
-		// 1152 muestras por frame MPEG1 L3
 		return float64(frames) * 1152.0 / 44100.0
 	}
 	return 0

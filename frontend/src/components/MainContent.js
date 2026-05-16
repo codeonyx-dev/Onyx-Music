@@ -7,6 +7,8 @@ import AlbumArt from './AlbumArt';
 import SongMenu from './SongMenu';
 import { formatTime } from '../utils/format';
 import { downloadSongs } from '../utils/download';
+import { songRef } from '../utils/songKey';
+import BrowseGrid from './BrowseGrid';
 
 function MainContent({
   songs,
@@ -29,6 +31,7 @@ function MainContent({
   loading,
   error,
   onRetry,
+  onRescan,
   searchQuery,
   onSearchChange,
   sortBy,
@@ -36,10 +39,19 @@ function MainContent({
   onSortChange,
   sortEnabled,
   onOpenAbout,
+  viewType = 'library',
+  browseArtists = [],
+  browseAlbums = [],
+  onSelectArtist,
+  onSelectAlbum,
+  onPlayBrowseItem,
+  onBrowseBack,
 }) {
   const isLibraryView = viewTitle === 'Tu Biblioteca';
+  const isBrowse = viewType === 'artists' || viewType === 'artist';
+  const showSongTable = !isBrowse;
   const [downloading, setDownloading] = useState(false);
-  const allSelected = songs.length > 0 && songs.every((s) => selected.has(s.filename));
+  const allSelected = songs.length > 0 && songs.every((s) => selected.has(songRef(s)));
   const selectedCount = selected.size;
 
   const formatFileSize = (bytes) => {
@@ -82,12 +94,26 @@ function MainContent({
                 <h2 className="text-xl sm:text-2xl font-bold text-white tracking-tight">{viewTitle}</h2>
               )}
               <p className="text-sm text-onyx-muted mt-1">
-                {songs.length} {songs.length === 1 ? 'canción' : 'canciones'}
-                {!isLibraryView && totalCount > 0 && ` · ${totalCount} en total`}
+                {isBrowse
+                  ? viewType === 'artists'
+                    ? `${browseArtists.length} artistas`
+                    : `${browseAlbums.length} álbumes`
+                  : `${songs.length} ${songs.length === 1 ? 'canción' : 'canciones'}${
+                      !isLibraryView && totalCount > 0 ? ` · ${totalCount} en total` : ''
+                    }`}
               </p>
             </div>
             <div className="flex items-center gap-2 flex-wrap">
-              {sortEnabled && (
+              {onBrowseBack && (
+                <button
+                  type="button"
+                  onClick={onBrowseBack}
+                  className="px-3 py-2 text-sm onyx-glass-panel border border-onyx-border text-onyx-muted hover:text-white"
+                >
+                  ← Volver
+                </button>
+              )}
+              {sortEnabled && showSongTable && (
                 <div className="relative flex items-center">
                   <ArrowUpDown className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-onyx-muted pointer-events-none" />
                   <select
@@ -118,20 +144,20 @@ function MainContent({
               </div>
               <button
                 type="button"
-                onClick={onRetry}
+                onClick={onRescan || onRetry}
                 className="p-2 onyx-glass-panel border border-onyx-border text-white hover:bg-onyx-hover"
-                title="Actualizar"
+                title="Reescanear biblioteca"
               >
                 <RefreshCw className="w-4 h-4" />
               </button>
             </div>
           </div>
 
-          {songs.length > 0 && (
+          {showSongTable && songs.length > 0 && (
             <div className="flex items-center gap-2 flex-wrap text-sm">
               <button
                 type="button"
-                onClick={() => (allSelected ? onClearSelection() : onSelectAll(songs.map((s) => s.filename)))}
+                onClick={() => (allSelected ? onClearSelection() : onSelectAll(songs.map((s) => songRef(s))))}
                 className="flex items-center gap-1.5 px-3 py-1.5 border border-onyx-border text-onyx-muted hover:text-white hover:bg-onyx-panel"
               >
                 {allSelected ? <CheckSquare className="w-4 h-4" /> : <Square className="w-4 h-4" />}
@@ -177,6 +203,13 @@ function MainContent({
               Reintentar
             </button>
           </div>
+        ) : isBrowse ? (
+          <BrowseGrid
+            mode={viewType === 'artists' ? 'artists' : 'albums'}
+            items={viewType === 'artists' ? browseArtists : browseAlbums}
+            onSelect={viewType === 'artists' ? onSelectArtist : onSelectAlbum}
+            onPlayAll={onPlayBrowseItem}
+          />
         ) : songs.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-20">
             <Music className="w-16 h-16 text-onyx-border mb-4" />
@@ -202,14 +235,15 @@ function MainContent({
             </div>
 
             {songs.map((song, index) => {
-              const isCurrent = currentSong?.filename === song.filename;
+              const ref = songRef(song);
+              const isCurrent = currentSong && songRef(currentSong) === ref;
               const isActive = isCurrent && isPlaying;
-              const fav = isFavorite(song.filename);
-              const checked = selected.has(song.filename);
+              const fav = isFavorite(song);
+              const checked = selected.has(ref);
 
               return (
                 <div
-                  key={song.filename}
+                  key={ref}
                   className={`group grid grid-cols-[auto_1fr_auto] sm:grid-cols-[auto_auto_1fr_auto_auto_auto_auto] gap-2 sm:gap-3 px-3 sm:px-4 py-3 items-center border-b border-onyx-border last:border-b-0 cursor-pointer transition-colors ${
                     isCurrent ? 'bg-onyx-hover' : 'hover:bg-onyx-hover/50'
                   } ${checked ? 'ring-1 ring-inset ring-white/20' : ''}`}
@@ -218,7 +252,7 @@ function MainContent({
                     type="button"
                     onClick={(e) => {
                       e.stopPropagation();
-                      onToggleSelect(song.filename);
+                      onToggleSelect(ref);
                     }}
                     className={`w-6 flex-shrink-0 ${checked ? 'text-white' : 'text-onyx-muted opacity-60 group-hover:opacity-100'}`}
                   >
@@ -241,18 +275,21 @@ function MainContent({
                   </span>
 
                   <div className="flex items-center gap-3 min-w-0" onClick={() => onSongSelect(song)}>
-                    <AlbumArt filename={song.filename} size="sm" className={isCurrent ? 'ring-1 ring-white' : ''} />
+                    <AlbumArt mediaRef={ref} size="sm" className={isCurrent ? 'ring-1 ring-white' : ''} />
                     <div className="min-w-0 flex-1">
                       <p className={`text-sm font-medium truncate ${isCurrent ? 'text-white' : 'text-onyx-text'}`}>
                         {song.title}
                       </p>
-                      <p className="text-xs text-onyx-muted truncate">{song.artist || 'Artista desconocido'}</p>
+                      <p className="text-xs text-onyx-muted truncate">
+                        {song.artist || 'Artista desconocido'}
+                        {song.album ? ` · ${song.album}` : ''}
+                      </p>
                     </div>
                     <button
                       type="button"
                       onClick={(e) => {
                         e.stopPropagation();
-                        onToggleFavorite(song.filename);
+                        onToggleFavorite(ref);
                       }}
                       className={`p-1 flex-shrink-0 ${fav ? 'text-red-400' : 'text-onyx-muted opacity-0 group-hover:opacity-100'}`}
                     >
@@ -276,11 +313,11 @@ function MainContent({
                     onPlayNow={() => onPlayNow(song)}
                     onPlayNext={() => onPlayNext(song)}
                     onAddToQueue={() => onAddToQueue(song)}
-                    onToggleFavorite={() => onToggleFavorite(song.filename)}
+                    onToggleFavorite={() => onToggleFavorite(ref)}
                     isFavorite={fav}
-                    onDownload={() => downloadSongs([song.filename])}
+                    onDownload={() => downloadSongs([ref])}
                     playlists={playlists}
-                    onAddToPlaylist={(id) => onAddToPlaylist(id, song.filename)}
+                    onAddToPlaylist={(id) => onAddToPlaylist(id, ref)}
                   />
                 </div>
               );

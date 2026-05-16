@@ -13,8 +13,9 @@ WORKDIR /app
 COPY backend/go.mod backend/go.sum ./
 RUN go mod download
 
-COPY backend/*.go ./
-RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-w -s" -o /onyx-server .
+COPY backend/cmd ./cmd
+COPY backend/internal ./internal
+RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-w -s" -o /onyx-server ./cmd/onyx
 
 FROM node:18-alpine AS frontend-build
 

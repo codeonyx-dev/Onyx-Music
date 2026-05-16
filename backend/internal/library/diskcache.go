@@ -1,10 +1,12 @@
-package main
+package library
 
 import (
 	"encoding/json"
 	"os"
 	"path/filepath"
 	"sync"
+
+	"music-player-backend/internal/config"
 )
 
 type diskSongEntry struct {
@@ -12,16 +14,17 @@ type diskSongEntry struct {
 	ModTime  int64   `json:"mod_time"`
 	Title    string  `json:"title"`
 	Artist   string  `json:"artist"`
+	Album    string  `json:"album"`
 	Duration float64 `json:"duration"`
 	HasCover bool    `json:"has_cover"`
 }
 
 type diskLibraryCache struct {
-	Version int                        `json:"version"`
-	Songs   map[string]diskSongEntry   `json:"songs"`
+	Version int                      `json:"version"`
+	Songs   map[string]diskSongEntry `json:"songs"`
 }
 
-const diskCacheVersion = 1
+const diskCacheVersion = 3
 
 var (
 	diskCacheMu sync.Mutex
@@ -29,7 +32,7 @@ var (
 )
 
 func cacheFilePath() string {
-	dir := cfg.CacheDir
+	dir := config.C.CacheDir
 	if dir == "" {
 		dir = filepath.Join(os.TempDir(), "onyx-music-cache")
 	}
@@ -53,11 +56,7 @@ func loadDiskCache() *diskLibraryCache {
 	}
 
 	var loaded diskLibraryCache
-	if err := json.Unmarshal(data, &loaded); err != nil || loaded.Songs == nil {
-		diskCache = &diskLibraryCache{Version: diskCacheVersion, Songs: map[string]diskSongEntry{}}
-		return diskCache
-	}
-	if loaded.Version != diskCacheVersion {
+	if err := json.Unmarshal(data, &loaded); err != nil || loaded.Songs == nil || loaded.Version != diskCacheVersion {
 		diskCache = &diskLibraryCache{Version: diskCacheVersion, Songs: map[string]diskSongEntry{}}
 		return diskCache
 	}
@@ -74,12 +73,11 @@ func saveDiskCache(dc *diskLibraryCache) {
 	if err != nil {
 		return
 	}
-	path := cacheFilePath()
-	_ = os.WriteFile(path, data, 0644)
+	_ = os.WriteFile(cacheFilePath(), data, 0644)
 }
 
-func diskCacheHit(dc *diskLibraryCache, filename string, size, modUnix int64) (diskSongEntry, bool) {
-	e, ok := dc.Songs[filename]
+func diskCacheHit(dc *diskLibraryCache, relPath string, size, modUnix int64) (diskSongEntry, bool) {
+	e, ok := dc.Songs[relPath]
 	if !ok {
 		return diskSongEntry{}, false
 	}
@@ -89,8 +87,8 @@ func diskCacheHit(dc *diskLibraryCache, filename string, size, modUnix int64) (d
 	return e, true
 }
 
-func diskCacheStore(dc *diskLibraryCache, filename string, e diskSongEntry) {
+func diskCacheStore(dc *diskLibraryCache, relPath string, e diskSongEntry) {
 	diskCacheMu.Lock()
-	dc.Songs[filename] = e
+	dc.Songs[relPath] = e
 	diskCacheMu.Unlock()
 }

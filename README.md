@@ -21,7 +21,7 @@ onyx-music/
 ├── .env.example          ← única plantilla de configuración
 ├── docker-compose.yml    ← despliegue Docker
 ├── docker/               ← nginx optimizado para streaming
-├── backend/              ← API Go
+├── backend/              ← API Go (cmd/onyx + internal/)
 ├── frontend/             ← React
 ├── deploy/               ← imagen Docker todo-en-uno
 ├── docs/                 ← guías (Docker, OMV, Cloudflare)
@@ -38,7 +38,7 @@ onyx-music/
 
 ## Desarrollo local
 
-**Backend:** `cd backend && go run .` (con `MUSIC_DIR=../music`)
+**Backend:** `cd backend && go run ./cmd/onyx` (con `MUSIC_DIR=../music`)
 
 **Frontend:** `cd frontend && npm install && npm start` (proxy `/api` en `package.json`)
 

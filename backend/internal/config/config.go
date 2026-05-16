@@ -1,4 +1,4 @@
-package main
+package config
 
 import (
 	"os"
@@ -6,7 +6,7 @@ import (
 	"strings"
 )
 
-type AppConfig struct {
+type Config struct {
 	MusicDir          string
 	Port              string
 	CacheDir          string
@@ -15,20 +15,13 @@ type AppConfig struct {
 	JWTSecret         string
 	PrefetchNext      bool
 	CrossfadeDefault  bool
-	StreamCacheMaxAge int // segundos, cabecera Cache-Control en /api/stream
+	StreamCacheMaxAge int
 }
 
-var cfg AppConfig
+var C Config
 
-func envOr(key, fallback string) string {
-	if v := os.Getenv(key); v != "" {
-		return v
-	}
-	return fallback
-}
-
-func loadConfig() {
-	cfg = AppConfig{
+func Load() {
+	C = Config{
 		MusicDir:          envOr("MUSIC_DIR", "./music"),
 		Port:              envOr("PORT", "9090"),
 		CacheDir:          envOr("CACHE_DIR", ""),
@@ -39,6 +32,13 @@ func loadConfig() {
 		CrossfadeDefault:  envBool("CROSSFADE_DEFAULT", false),
 		StreamCacheMaxAge: envInt("STREAM_CACHE_MAX_AGE", 3600),
 	}
+}
+
+func envOr(key, fallback string) string {
+	if v := os.Getenv(key); v != "" {
+		return v
+	}
+	return fallback
 }
 
 func envBool(key string, fallback bool) bool {

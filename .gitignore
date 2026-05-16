@@ -45,3 +45,6 @@ npm-debug.log*
 
 # Cursor / agentes (opcional)
 .cursor/
+
+# Referencia Navidrome (no versionar; clonar aparte si hace falta)
+navidrome-master/

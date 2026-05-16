@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { apiFetch, streamUrl } from '../config';
+import { apiFetch, streamUrl, coverUrl } from '../config';
 import { useSettings } from './useSettings';
 import { readLibraryCache, writeLibraryCache } from '../storage/libraryCache';
 import {
@@ -7,56 +7,24 @@ import {
   cacheTrackInBackground,
   touchCachedTrack,
 } from '../storage/audioCache';
-
-const CROSSFADE_SEC = 1.5;
-
-function initAudioElement() {
-  const audio = new Audio();
-  audio.preload = 'auto';
-  return audio;
-}
-
-/** Resuelve en cuanto hay datos para empezar (más rápido que esperar a `canplay`). */
-function waitAudioReady(audio, timeoutMs = 5000) {
-  if (audio.readyState >= 2) return Promise.resolve();
-  return new Promise((resolve) => {
-    const done = () => {
-      clearTimeout(timer);
-      audio.removeEventListener('loadeddata', done);
-      audio.removeEventListener('error', done);
-      resolve();
-    };
-    const timer = setTimeout(done, timeoutMs);
-    audio.addEventListener('loadeddata', done, { once: true });
-    audio.addEventListener('error', done, { once: true });
-  });
-}
-
-function shuffleArray(arr) {
-  const a = [...arr];
-  for (let i = a.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [a[i], a[j]] = [a[j], a[i]];
-  }
-  return a;
-}
-
-/** play() rejects with AbortError when pause() or src change interrupts it — expected, not a failure. */
-async function safePlay(audio) {
-  try {
-    await audio.play();
-    return true;
-  } catch (err) {
-    if (err?.name === 'AbortError') return false;
-    throw err;
-  }
-}
+import { songRef } from '../utils/songKey';
+import { triggerLibraryRescan, fetchLibraryStatus } from '../api/library';
+import {
+  CROSSFADE_SEC,
+  initAudioElement,
+  waitAudioReady,
+  safePlay,
+  shuffleArray,
+  fadeVolume,
+} from '../player/playback';
 
 export function usePlayer() {
   const { settings } = useSettings();
   const prefetchEnabledRef = useRef(false);
 
   const [songs, setSongs] = useState([]);
+  const [artists, setArtists] = useState([]);
+  const [albums, setAlbums] = useState([]);
   const [queue, setQueue] = useState([]);
   const [queueIndex, setQueueIndex] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -95,45 +63,55 @@ export function usePlayer() {
     if (settings.crossfadeDefault) setCrossfade(true);
   }, [settings]);
 
+  const applyLibrary = useCallback((lib) => {
+    setSongs(lib.songs || []);
+    setArtists(lib.artists || []);
+    setAlbums(lib.albums || []);
+  }, []);
+
   const fetchSongs = useCallback(async (options = {}) => {
     const { background = false } = options;
     const cached = readLibraryCache();
 
-    if (cached?.length && !background) {
-      setSongs(cached);
+    if (cached?.songs?.length && !background) {
+      applyLibrary(cached);
       setLoading(false);
     } else if (!background) {
       setLoading(true);
     }
 
     try {
-      const response = await apiFetch('/api/songs');
-      if (!response.ok) throw new Error('Error al obtener canciones');
+      const response = await apiFetch('/api/library');
+      if (!response.ok) throw new Error('Error al obtener la biblioteca');
       const data = await response.json();
-      const list = data.songs || [];
-      setSongs(list);
-      writeLibraryCache(list);
+      const lib = {
+        songs: data.songs || [],
+        artists: data.artists || [],
+        albums: data.albums || [],
+      };
+      applyLibrary(lib);
+      writeLibraryCache(lib);
       setError(null);
     } catch (err) {
-      if (!cached?.length) {
+      if (!cached?.songs?.length) {
         setError('No se pudo cargar la biblioteca.');
       }
       console.error(err);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [applyLibrary]);
 
   useEffect(() => {
     const cached = readLibraryCache();
-    if (cached?.length) {
-      setSongs(cached);
+    if (cached?.songs?.length) {
+      applyLibrary(cached);
       setLoading(false);
       fetchSongs({ background: true });
     } else {
       fetchSongs();
     }
-  }, [fetchSongs]);
+  }, [fetchSongs, applyLibrary]);
 
   const getNextIndex = useCallback((idx, q, shuf, loop) => {
     if (q.length === 0) return -1;
@@ -151,35 +129,22 @@ export function usePlayer() {
     return -1;
   }, []);
 
-  const fadeVolume = useCallback((audio, from, to, ms) => {
-    return new Promise((resolve) => {
-      const start = performance.now();
-      const step = (now) => {
-        const t = Math.min(1, (now - start) / ms);
-        audio.volume = from + (to - from) * t;
-        if (t < 1) requestAnimationFrame(step);
-        else resolve();
-      };
-      requestAnimationFrame(step);
-    });
-  }, []);
-
   const prefetchNextInQueue = useCallback(() => {
     if (!prefetchEnabledRef.current || isTransitioningRef.current) return;
     const idx = queueIndexRef.current;
     const q = queueRef.current;
     const nextIdx = getNextIndex(idx, q, shuffleRef.current, loopRef.current);
     if (nextIdx < 0 || !q[nextIdx]) return;
-    cacheTrackInBackground(q[nextIdx].filename);
+    cacheTrackInBackground(songRef(q[nextIdx]));
   }, [getNextIndex]);
 
-  const resolvePlaybackSrc = useCallback(async (filename) => {
-    const cached = await getCachedPlaybackUrl(filename);
+  const resolvePlaybackSrc = useCallback(async (ref) => {
+    const cached = await getCachedPlaybackUrl(ref);
     if (cached) {
-      touchCachedTrack(filename);
+      touchCachedTrack(ref);
       return cached;
     }
-    return streamUrl(filename);
+    return streamUrl(ref);
   }, []);
 
   const cancelPendingPlayback = useCallback(() => {
@@ -204,7 +169,7 @@ export function usePlayer() {
     const targetVol = volume;
 
     const dur = song.duration > 0 ? song.duration : undefined;
-    const url = await resolvePlaybackSrc(song.filename);
+    const url = await resolvePlaybackSrc(songRef(song));
 
     try {
       if (
@@ -262,7 +227,7 @@ export function usePlayer() {
       setError(null);
 
       if (!url.startsWith('blob:')) {
-        cacheTrackInBackground(song.filename);
+        cacheTrackInBackground(songRef(song));
       }
       if (prefetchEnabledRef.current) prefetchNextInQueue();
     } catch (err) {
@@ -274,7 +239,7 @@ export function usePlayer() {
     } finally {
       if (!isStale()) isTransitioningRef.current = false;
     }
-  }, [volume, fadeVolume, resolvePlaybackSrc, prefetchNextInQueue]);
+  }, [volume, resolvePlaybackSrc, prefetchNextInQueue]);
 
   const playAtIndex = useCallback((index, withCrossfade = false) => {
     const q = queueRef.current;
@@ -305,8 +270,8 @@ export function usePlayer() {
     const buildRest = () => {
       const all = songsRef.current;
       const rest = shuffleRef.current
-        ? shuffleArray(all.filter((s) => s.filename !== song.filename))
-        : all.filter((s) => s.filename !== song.filename);
+        ? shuffleArray(all.filter((s) => songRef(s) !== songRef(song)))
+        : all.filter((s) => songRef(s) !== songRef(song));
       const fullQueue = [song, ...rest];
       setQueue(fullQueue);
       queueRef.current = fullQueue;
@@ -468,7 +433,7 @@ export function usePlayer() {
       coverBlobRef.current = null;
       let artwork = [];
       try {
-        const res = await apiFetch(`/api/cover/${encodeURIComponent(currentSong.filename)}`);
+        const res = await fetch(coverUrl(songRef(currentSong)));
         if (res.ok) {
           const blob = await res.blob();
           const url = URL.createObjectURL(blob);
@@ -507,6 +472,8 @@ export function usePlayer() {
 
   return {
     songs,
+    artists,
+    albums,
     queue,
     queueIndex,
     currentSong,
@@ -524,6 +491,26 @@ export function usePlayer() {
     cycleLoop,
     setVolume,
     fetchSongs,
+    rescanLibrary: async () => {
+      try {
+        await triggerLibraryRescan();
+      } catch {
+        /* ya escaneando */
+      }
+      const poll = async () => {
+        try {
+          const st = await fetchLibraryStatus();
+          if (st.scanning) {
+            setTimeout(poll, 800);
+            return;
+          }
+        } catch {
+          /* ignore */
+        }
+        await fetchSongs({ background: true });
+      };
+      poll();
+    },
     playNow,
     playNext,
     addToQueue,

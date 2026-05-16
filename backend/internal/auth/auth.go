@@ -1,4 +1,4 @@
-package main
+package auth
 
 import (
 	"strings"
@@ -6,9 +6,10 @@ import (
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/golang-jwt/jwt/v5"
+	"music-player-backend/internal/config"
 )
 
-type loginRequest struct {
+type LoginRequest struct {
 	Username string `json:"username"`
 	Password string `json:"password"`
 }
@@ -18,22 +19,17 @@ type claims struct {
 	jwt.RegisteredClaims
 }
 
-func authConfig() (user, pass, secret string) {
-	return cfg.OnyxUser, cfg.OnyxPassword, cfg.JWTSecret
-}
-
-func handleLogin(c *fiber.Ctx) error {
-	var body loginRequest
+func HandleLogin(c *fiber.Ctx) error {
+	var body LoginRequest
 	if err := c.BodyParser(&body); err != nil {
 		return c.Status(400).JSON(fiber.Map{"error": "JSON inválido"})
 	}
 
-	user, pass, secret := authConfig()
-	if body.Username != user || body.Password != pass {
+	if body.Username != config.C.OnyxUser || body.Password != config.C.OnyxPassword {
 		return c.Status(401).JSON(fiber.Map{"error": "Usuario o contraseña incorrectos"})
 	}
 
-	token, err := signToken(body.Username, secret)
+	token, err := signToken(body.Username, config.C.JWTSecret)
 	if err != nil {
 		return c.Status(500).JSON(fiber.Map{"error": "No se pudo crear la sesión"})
 	}
@@ -45,7 +41,7 @@ func handleLogin(c *fiber.Ctx) error {
 	})
 }
 
-func handleMe(c *fiber.Ctx) error {
+func HandleMe(c *fiber.Ctx) error {
 	username, ok := c.Locals("username").(string)
 	if !ok || username == "" {
 		return c.Status(401).JSON(fiber.Map{"error": "No autenticado"})
@@ -64,12 +60,7 @@ func signToken(username, secret string) (string, error) {
 	return t.SignedString([]byte(secret))
 }
 
-func authMiddleware(c *fiber.Ctx) error {
-	path := c.Path()
-	if strings.HasPrefix(path, "/api/auth/") || path == "/health" {
-		return c.Next()
-	}
-
+func Middleware(c *fiber.Ctx) error {
 	auth := c.Get("Authorization")
 	tokenStr := ""
 	if strings.HasPrefix(auth, "Bearer ") {
@@ -81,10 +72,9 @@ func authMiddleware(c *fiber.Ctx) error {
 	if tokenStr == "" {
 		return c.Status(401).JSON(fiber.Map{"error": "Token requerido"})
 	}
-	_, _, secret := authConfig()
 
 	token, err := jwt.ParseWithClaims(tokenStr, &claims{}, func(t *jwt.Token) (interface{}, error) {
-		return []byte(secret), nil
+		return []byte(config.C.JWTSecret), nil
 	})
 	if err != nil || !token.Valid {
 		return c.Status(401).JSON(fiber.Map{"error": "Sesión inválida o expirada"})

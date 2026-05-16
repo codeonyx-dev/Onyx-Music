@@ -2,7 +2,8 @@ import React, { useState } from 'react';
 import { Music } from 'lucide-react';
 import { coverUrl } from '../config';
 
-function AlbumArt({ filename, size = 'md', className = '' }) {
+function AlbumArt({ mediaRef, filename, size = 'md', className = '' }) {
+  const ref = mediaRef || filename;
   const [failed, setFailed] = useState(false);
 
   const sizes = {
@@ -19,7 +20,7 @@ function AlbumArt({ filename, size = 'md', className = '' }) {
     xl: 'w-16 h-16',
   };
 
-  const src = filename && !failed ? coverUrl(filename) : null;
+  const src = ref && !failed ? coverUrl(ref) : null;
 
   return (
     <div
@@ -27,7 +28,7 @@ function AlbumArt({ filename, size = 'md', className = '' }) {
     >
       {src ? (
         <img
-          key={filename}
+          key={ref}
           src={src}
           alt=""
           className="w-full h-full object-cover"

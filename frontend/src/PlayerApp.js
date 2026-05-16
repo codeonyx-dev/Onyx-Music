@@ -11,6 +11,7 @@ import { useAuth } from './context/AuthContext';
 import { LOGO_ICON } from './constants/assets';
 import AboutModal from './components/AboutModal';
 import { sortSongs } from './utils/sort';
+import { songRef } from './utils/songKey';
 
 const SORT_KEY = 'onyx_sort';
 
@@ -44,7 +45,18 @@ function PlayerApp() {
     localStorage.setItem(SORT_KEY, JSON.stringify({ sortBy: by, sortDir: dir }));
   }, []);
 
+  const browseArtists = player.artists;
+  const browseAlbums = useMemo(() => {
+    if (library.view.type === 'artist') {
+      return library.albumsForArtist(library.view.id, player.albums);
+    }
+    return [];
+  }, [library, player.albums]);
+
   const viewSongs = useMemo(() => {
+    if (library.view.type === 'artists' || library.view.type === 'artist') {
+      return [];
+    }
     let list = library.filterSongs(player.songs);
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
@@ -52,7 +64,8 @@ function PlayerApp() {
         (s) =>
           s.title.toLowerCase().includes(q) ||
           (s.artist && s.artist.toLowerCase().includes(q)) ||
-          s.filename.toLowerCase().includes(q)
+          s.filename.toLowerCase().includes(q) ||
+          (s.album && s.album.toLowerCase().includes(q))
       );
     }
     if (library.view.type !== 'playlist') {
@@ -62,14 +75,44 @@ function PlayerApp() {
   }, [player.songs, library, searchQuery, sortBy, sortDir]);
 
   const handleSongSelect = (song) => {
-    if (player.currentSong?.filename === song.filename) {
+    if (player.currentSong && songRef(player.currentSong) === songRef(song)) {
       player.handlePlayPause();
     } else {
       player.playNow(song);
     }
   };
 
-  const sortEnabled = library.view.type !== 'playlist';
+  const sortEnabled =
+    library.view.type !== 'playlist' &&
+    library.view.type !== 'artists' &&
+    library.view.type !== 'artist';
+
+  const playSongs = useCallback(
+    (trackList) => {
+      if (!trackList?.length) return;
+      player.playNow(trackList[0]);
+      if (trackList.length > 1) {
+        trackList.slice(1).forEach((s) => player.addToQueue(s));
+      }
+    },
+    [player]
+  );
+
+  const handlePlayArtist = useCallback(
+    (artist) => {
+      const tracks = player.songs.filter((s) => s.artist_id === artist.id);
+      playSongs(tracks);
+    },
+    [player.songs, playSongs]
+  );
+
+  const handlePlayAlbum = useCallback(
+    (album) => {
+      const tracks = player.songs.filter((s) => s.album_id === album.id);
+      playSongs(tracks);
+    },
+    [player.songs, playSongs]
+  );
 
   return (
     <div className="flex h-[100dvh] bg-onyx-black overflow-hidden relative">
@@ -135,7 +178,26 @@ function PlayerApp() {
             <MainContent
               songs={viewSongs}
               totalCount={player.songs.length}
-              viewTitle={library.getViewTitle()}
+              viewTitle={library.getViewTitle(player.artists, player.albums)}
+              viewType={library.view.type}
+              browseArtists={browseArtists}
+              browseAlbums={browseAlbums}
+              onSelectArtist={(a) => library.setView({ type: 'artist', id: a.id })}
+              onSelectAlbum={(al) => library.setView({ type: 'album', id: al.id })}
+              onPlayBrowseItem={
+                library.view.type === 'artists' ? handlePlayArtist : handlePlayAlbum
+              }
+              onBrowseBack={
+                library.view.type === 'artist'
+                  ? () => library.setView({ type: 'artists' })
+                  : library.view.type === 'album'
+                  ? () => {
+                      const al = player.albums.find((a) => a.id === library.view.id);
+                      if (al) library.setView({ type: 'artist', id: al.artist_id });
+                      else library.setView({ type: 'artists' });
+                    }
+                  : null
+              }
               currentSong={player.currentSong}
               isPlaying={player.isPlaying}
               onSongSelect={handleSongSelect}
@@ -153,6 +215,7 @@ function PlayerApp() {
               loading={player.loading}
               error={player.error}
               onRetry={player.fetchSongs}
+              onRescan={player.rescanLibrary}
               searchQuery={searchQuery}
               onSearchChange={setSearchQuery}
               sortBy={sortBy}

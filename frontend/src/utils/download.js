@@ -1,14 +1,14 @@
 import { apiFetch } from '../config';
 
-export async function downloadSong(filename) {
-  const response = await apiFetch(`/api/stream/${encodeURIComponent(filename)}`);
-  if (!response.ok) throw new Error(`No se pudo descargar ${filename}`);
+export async function downloadSong(mediaRef) {
+  const response = await apiFetch(`/api/stream/${encodeURIComponent(mediaRef)}`);
+  if (!response.ok) throw new Error(`No se pudo descargar ${mediaRef}`);
 
   const blob = await response.blob();
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = filename;
+  a.download = mediaRef.split('/').pop() || mediaRef;
   document.body.appendChild(a);
   a.click();
   a.remove();

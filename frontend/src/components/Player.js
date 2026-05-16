@@ -81,7 +81,7 @@ function Player({
         <div className="flex items-center gap-3 min-w-0 flex-1 basis-[200px]">
           {currentSong ? (
             <>
-              <AlbumArt filename={currentSong.filename} size="md" />
+              <AlbumArt mediaRef={currentSong.id || currentSong.filename} size="md" />
               <div className="min-w-0">
                 <p className="text-sm font-medium text-white truncate">{currentSong.title}</p>
                 <p className="text-xs text-onyx-muted truncate">{currentSong.artist || 'Artista desconocido'}</p>

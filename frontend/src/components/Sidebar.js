@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import {
-  LogOut, X, Library, Heart, ListMusic, Plus, Trash2, HardDrive,
+  LogOut, X, Library, Heart, ListMusic, Plus, Trash2, HardDrive, Users,
 } from 'lucide-react';
 
 import { LOGO_ICON } from '../constants/assets';
@@ -69,6 +69,14 @@ function Sidebar({
           <button type="button" className={navBtn(view.type === 'library')} onClick={() => onViewChange({ type: 'library' })}>
             <Library className="w-5 h-5 flex-shrink-0" />
             Todas las canciones
+          </button>
+          <button
+            type="button"
+            className={navBtn(view.type === 'artists' || view.type === 'artist' || view.type === 'album')}
+            onClick={() => onViewChange({ type: 'artists' })}
+          >
+            <Users className="w-5 h-5 flex-shrink-0" />
+            Artistas
           </button>
           <button type="button" className={navBtn(view.type === 'favorites')} onClick={() => onViewChange({ type: 'favorites' })}>
             <Heart className={`w-5 h-5 flex-shrink-0 ${view.type === 'favorites' ? 'fill-current' : ''}`} />
