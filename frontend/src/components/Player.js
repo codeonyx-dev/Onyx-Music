@@ -60,7 +60,7 @@ function Player({
   }, [isDragging, dragValue, duration, onSeek]);
 
   return (
-    <footer className="bg-onyx-dark/85 backdrop-blur-md border-t border-onyx-border/80 flex-shrink-0">
+    <footer className="onyx-glass border-t border-onyx-border/80 flex-shrink-0">
       <div className="px-3 sm:px-6 pt-2 flex items-center gap-2 max-w-4xl mx-auto w-full">
         <span className="text-xs text-onyx-muted w-9 text-right tabular-nums">{formatTime(displayTime)}</span>
         <div

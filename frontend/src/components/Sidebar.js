@@ -37,7 +37,7 @@ function Sidebar({
   };
 
   return (
-    <aside className="w-64 h-full bg-onyx-dark/80 backdrop-blur-md flex flex-col border-r border-onyx-border/80">
+    <aside className="w-64 h-full onyx-glass flex flex-col border-r border-onyx-border/80">
       <div className="px-5 py-5 border-b border-onyx-border/80 flex items-center justify-between gap-2 flex-shrink-0">
         <button
           type="button"
@@ -134,7 +134,7 @@ function Sidebar({
         </section>
 
         <section className="px-3">
-          <div className="bg-onyx-panel/80 backdrop-blur-sm p-3 border border-onyx-border/80">
+          <div className="onyx-glass-panel p-3 border border-onyx-border/80">
             <div className="flex items-center gap-2 mb-1">
               <HardDrive className="w-4 h-4 text-onyx-muted" />
               <span className="text-xs text-onyx-muted">Canciones en disco</span>

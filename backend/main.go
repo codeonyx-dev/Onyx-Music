@@ -105,6 +105,22 @@ func handleStream(c *fiber.Ctx) error {
 		return c.Status(500).JSON(fiber.Map{"error": "Error al acceder al archivo"})
 	}
 
+	ext := strings.ToLower(filepath.Ext(filePath))
+	switch ext {
+	case ".mp3":
+		c.Set("Content-Type", "audio/mpeg")
+	case ".flac":
+		c.Set("Content-Type", "audio/flac")
+	case ".ogg":
+		c.Set("Content-Type", "audio/ogg")
+	case ".wav":
+		c.Set("Content-Type", "audio/wav")
+	case ".m4a", ".aac":
+		c.Set("Content-Type", "audio/mp4")
+	}
+	c.Set("Accept-Ranges", "bytes")
+	c.Set("Cache-Control", "private, max-age=3600")
+
 	return c.SendFile(filePath)
 }
 

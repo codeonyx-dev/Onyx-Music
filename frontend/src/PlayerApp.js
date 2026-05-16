@@ -107,7 +107,7 @@ function PlayerApp() {
         </div>
 
         <div className="flex-1 flex flex-col min-w-0 min-h-0">
-          <header className="lg:hidden flex items-center justify-between px-4 py-3 border-b border-onyx-border/80 bg-onyx-dark/80 backdrop-blur-md flex-shrink-0">
+          <header className="lg:hidden flex items-center justify-between px-4 py-3 border-b border-onyx-border/80 onyx-glass flex-shrink-0">
             <button type="button" onClick={() => setSidebarOpen(true)} className="text-white p-1">
               <Menu className="w-6 h-6" />
             </button>
@@ -185,7 +185,7 @@ function PlayerApp() {
             loopMode={player.loopMode}
             crossfade={player.crossfade}
             onPlayPause={player.handlePlayPause}
-            onNext={player.advance}
+            onNext={() => player.advance(false)}
             onPrevious={player.handlePrevious}
             onSeek={player.handleSeek}
             onVolumeChange={player.setVolume}

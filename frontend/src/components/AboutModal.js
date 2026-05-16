@@ -28,13 +28,13 @@ function AboutModal({ onClose }) {
     >
       <button
         type="button"
-        className="absolute inset-0 bg-black/75 backdrop-blur-sm"
+        className="absolute inset-0 bg-black/85"
         onClick={onClose}
         aria-label="Cerrar"
       />
 
       <div
-        className="relative z-10 w-full max-w-md max-h-[90vh] overflow-y-auto bg-onyx-dark/95 backdrop-blur-md border border-onyx-border/80 shadow-2xl p-6 sm:p-8 mx-auto"
+        className="relative z-10 w-full max-w-md max-h-[90vh] overflow-y-auto onyx-glass border border-onyx-border/80 shadow-2xl p-6 sm:p-8 mx-auto"
         onClick={(e) => e.stopPropagation()}
       >
         <button

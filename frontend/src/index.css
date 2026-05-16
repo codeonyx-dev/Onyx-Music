@@ -34,3 +34,14 @@
     background: #555555;
   }
 }
+
+@layer utilities {
+  /* Opaque surfaces instead of backdrop-blur to avoid Chromium GpuShader/CAS errors
+     when GPU compositing is disabled (remote desktop, flags, etc.). */
+  .onyx-glass {
+    @apply bg-onyx-dark/95;
+  }
+  .onyx-glass-panel {
+    @apply bg-onyx-panel/95;
+  }
+}
