@@ -457,6 +457,10 @@ export function usePlayer() {
   }, [volume]);
 
   useEffect(() => {
+    if (currentSong && (isPlaying || queue.length > 0)) prefetchNextInQueue();
+  }, [currentSong, isPlaying, queue, prefetchNextInQueue]);
+
+  useEffect(() => {
     if (!currentSong || !('mediaSession' in navigator)) return;
 
     const updateArtwork = async () => {

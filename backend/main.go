@@ -81,8 +81,8 @@ func handleGetSongs(c *fiber.Ctx) error {
 
 func handleSettings(c *fiber.Ctx) error {
 	return c.JSON(fiber.Map{
-		"prefetch_next":      cfg.PrefetchNext,
-		"crossfade_default":  cfg.CrossfadeDefault,
+		"prefetch_next":       cfg.PrefetchNext,
+		"crossfade_default":   cfg.CrossfadeDefault,
 		"audio_cache_enabled": true,
 	})
 }
