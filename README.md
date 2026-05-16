@@ -18,6 +18,8 @@ onyx-music-player/
 │   ├── public/assets/       # logo, fondo, iconos PWA
 │   └── Dockerfile
 ├── deploy/
+│   ├── Dockerfile           # Imagen única (API + web)
+│   ├── build.sh
 │   └── openmediavault/      # Stack Docker para OMV / NAS
 │       ├── docker-compose.yml
 │       ├── .env.example
