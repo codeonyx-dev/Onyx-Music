@@ -60,7 +60,7 @@ func getCachedSongs() ([]Song, error) {
 }
 
 func musicLibrarySignature() (string, error) {
-	entries, err := os.ReadDir(musicDir)
+	entries, err := os.ReadDir(cfg.MusicDir)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return "empty", nil
@@ -90,10 +90,10 @@ func musicLibrarySignature() (string, error) {
 const timeFormat = "20060102150405"
 
 func scanMusicLibrary() ([]Song, error) {
-	entries, err := os.ReadDir(musicDir)
+	entries, err := os.ReadDir(cfg.MusicDir)
 	if err != nil {
 		if os.IsNotExist(err) {
-			if err := os.MkdirAll(musicDir, 0755); err != nil {
+			if err := os.MkdirAll(cfg.MusicDir, 0755); err != nil {
 				return nil, err
 			}
 			return []Song{}, nil

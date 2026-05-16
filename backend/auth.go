@@ -19,10 +19,7 @@ type claims struct {
 }
 
 func authConfig() (user, pass, secret string) {
-	user = envOr("ONYX_USER", "admin")
-	pass = envOr("ONYX_PASSWORD", "onyx123")
-	secret = envOr("JWT_SECRET", "onyx-dev-secret-change-in-production")
-	return
+	return cfg.OnyxUser, cfg.OnyxPassword, cfg.JWTSecret
 }
 
 func handleLogin(c *fiber.Ctx) error {

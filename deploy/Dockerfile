@@ -36,7 +36,7 @@ RUN apk add --no-cache nginx ca-certificates tzdata \
     && mkdir -p /music /cache /run/nginx \
     && chown -R nginx:nginx /var/lib/nginx
 
-COPY deploy/nginx.conf /etc/nginx/http.d/default.conf
+COPY docker/nginx-single.conf /etc/nginx/http.d/default.conf
 COPY --from=frontend-build /app/build /usr/share/nginx/html
 COPY --from=backend-build /onyx-server /usr/local/bin/onyx-server
 COPY deploy/entrypoint.sh /entrypoint.sh

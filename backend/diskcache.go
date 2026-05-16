@@ -29,7 +29,7 @@ var (
 )
 
 func cacheFilePath() string {
-	dir := envOr("CACHE_DIR", "")
+	dir := cfg.CacheDir
 	if dir == "" {
 		dir = filepath.Join(os.TempDir(), "onyx-music-cache")
 	}

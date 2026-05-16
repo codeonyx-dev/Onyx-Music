@@ -34,7 +34,7 @@ function Login() {
     >
       <div className="absolute inset-0 bg-black/75" aria-hidden />
 
-      <div className="relative w-full max-w-md border border-onyx-border/80 bg-onyx-dark/90 backdrop-blur-md p-8 shadow-2xl">
+      <div className="relative w-full max-w-md border border-onyx-border/80 onyx-glass p-8 shadow-2xl">
         <div className="flex flex-col items-center mb-8">
           <img src={LOGO} alt="Onyx Music" className="h-28 w-auto object-contain mb-4" />
           <p className="text-xs text-onyx-muted">Inicia sesión para continuar</p>

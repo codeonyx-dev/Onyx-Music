@@ -28,7 +28,7 @@ function QueuePanel({
   return (
     <>
       <div className="fixed inset-0 bg-black/60 z-40 lg:hidden" onClick={onClose} aria-hidden />
-      <aside className="fixed right-0 top-0 bottom-0 w-full max-w-sm bg-onyx-dark/85 backdrop-blur-md border-l border-onyx-border/80 z-50 flex flex-col shadow-2xl lg:static lg:max-w-xs lg:shadow-none lg:z-0 lg:flex-shrink-0">
+      <aside className="fixed right-0 top-0 bottom-0 w-full max-w-sm onyx-glass border-l border-onyx-border/80 z-50 flex flex-col shadow-2xl lg:static lg:max-w-xs lg:shadow-none lg:z-0 lg:flex-shrink-0">
         <div className="flex items-center justify-between px-4 py-4 border-b border-onyx-border">
           <div className="flex items-center gap-2">
             <ListMusic className="w-5 h-5 text-white" />

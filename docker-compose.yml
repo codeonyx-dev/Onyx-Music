@@ -1,15 +1,21 @@
-# Onyx Music Player — uso general y desarrollo
-# Copia .env.example a .env y ajusta valores antes de iniciar.
+# Onyx Music — un solo archivo .env en la raíz (cp .env.example .env)
+#
+# Define COMPOSE_PROFILES en .env:
+#   split  → frontend + backend (por defecto)
+#   single → un solo contenedor (NAS/OMV)
+#
+#   docker compose up -d --build
 
-name: onyx-music-player
+name: onyx-music
 
 services:
   backend:
+    profiles: ["split"]
     build:
       context: ./backend
-      dockerfile: Dockerfile
     container_name: onyx-backend
     restart: unless-stopped
+    env_file: .env
     volumes:
       - ${MUSIC_PATH:-./music}:/music:ro
       - onyx-cache:/cache
@@ -19,14 +25,18 @@ services:
       CACHE_DIR: /cache
       ONYX_USER: ${ONYX_USER:-admin}
       ONYX_PASSWORD: ${ONYX_PASSWORD:-onyx123}
-      JWT_SECRET: ${JWT_SECRET:-onyx-change-this-secret-in-production}
+      JWT_SECRET: ${JWT_SECRET:-onyx-change-this-secret}
+      PREFETCH_NEXT: ${PREFETCH_NEXT:-true}
+      CROSSFADE_DEFAULT: ${CROSSFADE_DEFAULT:-false}
+      STREAM_CACHE_MAX_AGE: ${STREAM_CACHE_MAX_AGE:-3600}
     networks:
       - onyx-network
 
   frontend:
+    profiles: ["split"]
     build:
-      context: ./frontend
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: frontend/Dockerfile
       args:
         REACT_APP_API_URL: ${REACT_APP_API_URL:-}
     container_name: onyx-frontend
@@ -35,6 +45,32 @@ services:
       - "${FRONTEND_PORT:-4000}:80"
     depends_on:
       - backend
+    networks:
+      - onyx-network
+
+  onyx:
+    profiles: ["single"]
+    build:
+      context: .
+      dockerfile: deploy/Dockerfile
+    container_name: onyx-music
+    restart: unless-stopped
+    env_file: .env
+    ports:
+      - "${FRONTEND_PORT:-4000}:80"
+    volumes:
+      - ${MUSIC_PATH:-./music}:/music:ro
+      - onyx-cache:/cache
+    environment:
+      PORT: ${PORT:-9090}
+      MUSIC_DIR: /music
+      CACHE_DIR: /cache
+      ONYX_USER: ${ONYX_USER:-admin}
+      ONYX_PASSWORD: ${ONYX_PASSWORD:-onyx123}
+      JWT_SECRET: ${JWT_SECRET:-onyx-change-this-secret}
+      PREFETCH_NEXT: ${PREFETCH_NEXT:-true}
+      CROSSFADE_DEFAULT: ${CROSSFADE_DEFAULT:-false}
+      STREAM_CACHE_MAX_AGE: ${STREAM_CACHE_MAX_AGE:-3600}
     networks:
       - onyx-network
 

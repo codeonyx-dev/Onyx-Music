@@ -1,26 +1,35 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { apiFetch, streamUrl, coverUrl } from '../config';
+import { apiFetch, streamUrl } from '../config';
+import { useSettings } from './useSettings';
+import { readLibraryCache, writeLibraryCache } from '../storage/libraryCache';
+import {
+  getCachedPlaybackUrl,
+  cacheTrackInBackground,
+  touchCachedTrack,
+} from '../storage/audioCache';
 
-const CROSSFADE_SEC = 3;
-const LIBRARY_CACHE_KEY = 'onyx_library_songs';
+const CROSSFADE_SEC = 1.5;
 
-function readLibraryCache() {
-  try {
-    const raw = sessionStorage.getItem(LIBRARY_CACHE_KEY);
-    if (!raw) return null;
-    const data = JSON.parse(raw);
-    return Array.isArray(data?.songs) ? data.songs : null;
-  } catch {
-    return null;
-  }
+function initAudioElement() {
+  const audio = new Audio();
+  audio.preload = 'auto';
+  return audio;
 }
 
-function writeLibraryCache(songs) {
-  try {
-    sessionStorage.setItem(LIBRARY_CACHE_KEY, JSON.stringify({ songs, ts: Date.now() }));
-  } catch {
-    /* quota / private mode */
-  }
+/** Resuelve en cuanto hay datos para empezar (más rápido que esperar a `canplay`). */
+function waitAudioReady(audio, timeoutMs = 5000) {
+  if (audio.readyState >= 2) return Promise.resolve();
+  return new Promise((resolve) => {
+    const done = () => {
+      clearTimeout(timer);
+      audio.removeEventListener('loadeddata', done);
+      audio.removeEventListener('error', done);
+      resolve();
+    };
+    const timer = setTimeout(done, timeoutMs);
+    audio.addEventListener('loadeddata', done, { once: true });
+    audio.addEventListener('error', done, { once: true });
+  });
 }
 
 function shuffleArray(arr) {
@@ -32,7 +41,21 @@ function shuffleArray(arr) {
   return a;
 }
 
+/** play() rejects with AbortError when pause() or src change interrupts it — expected, not a failure. */
+async function safePlay(audio) {
+  try {
+    await audio.play();
+    return true;
+  } catch (err) {
+    if (err?.name === 'AbortError') return false;
+    throw err;
+  }
+}
+
 export function usePlayer() {
+  const { settings } = useSettings();
+  const prefetchEnabledRef = useRef(false);
+
   const [songs, setSongs] = useState([]);
   const [queue, setQueue] = useState([]);
   const [queueIndex, setQueueIndex] = useState(0);
@@ -44,10 +67,10 @@ export function usePlayer() {
   const [error, setError] = useState(null);
   const [shuffle, setShuffle] = useState(false);
   const [loopMode, setLoopMode] = useState('off'); // off | all | one
-  const [crossfade, setCrossfade] = useState(true);
+  const [crossfade, setCrossfade] = useState(false);
 
-  const audioRef = useRef(new Audio());
-  const nextAudioRef = useRef(new Audio());
+  const audioRef = useRef(initAudioElement());
+  const nextAudioRef = useRef(initAudioElement());
   const queueRef = useRef(queue);
   const queueIndexRef = useRef(queueIndex);
   const songsRef = useRef(songs);
@@ -55,6 +78,7 @@ export function usePlayer() {
   const loopRef = useRef(loopMode);
   const crossfadeRef = useRef(crossfade);
   const isTransitioningRef = useRef(false);
+  const playbackGenRef = useRef(0);
   const coverBlobRef = useRef(null);
 
   const currentSong = queue[queueIndex] || null;
@@ -65,6 +89,11 @@ export function usePlayer() {
   useEffect(() => { shuffleRef.current = shuffle; }, [shuffle]);
   useEffect(() => { loopRef.current = loopMode; }, [loopMode]);
   useEffect(() => { crossfadeRef.current = crossfade; }, [crossfade]);
+
+  useEffect(() => {
+    prefetchEnabledRef.current = settings.prefetchNext;
+    if (settings.crossfadeDefault) setCrossfade(true);
+  }, [settings]);
 
   const fetchSongs = useCallback(async (options = {}) => {
     const { background = false } = options;
@@ -135,58 +164,117 @@ export function usePlayer() {
     });
   }, []);
 
+  const prefetchNextInQueue = useCallback(() => {
+    if (!prefetchEnabledRef.current || isTransitioningRef.current) return;
+    const idx = queueIndexRef.current;
+    const q = queueRef.current;
+    const nextIdx = getNextIndex(idx, q, shuffleRef.current, loopRef.current);
+    if (nextIdx < 0 || !q[nextIdx]) return;
+    cacheTrackInBackground(q[nextIdx].filename);
+  }, [getNextIndex]);
+
+  const resolvePlaybackSrc = useCallback(async (filename) => {
+    const cached = await getCachedPlaybackUrl(filename);
+    if (cached) {
+      touchCachedTrack(filename);
+      return cached;
+    }
+    return streamUrl(filename);
+  }, []);
+
+  const cancelPendingPlayback = useCallback(() => {
+    playbackGenRef.current += 1;
+    if (isTransitioningRef.current) {
+      const nextAudio = nextAudioRef.current;
+      nextAudio.pause();
+      nextAudio.removeAttribute('src');
+      nextAudio.load();
+      isTransitioningRef.current = false;
+    }
+  }, []);
+
   const loadAndPlay = useCallback(async (song, useCrossfade = false) => {
-    if (!song || isTransitioningRef.current) return;
+    if (!song) return;
+
+    const gen = ++playbackGenRef.current;
+    const isStale = () => gen !== playbackGenRef.current;
+
     const audio = audioRef.current;
     const nextAudio = nextAudioRef.current;
     const targetVol = volume;
 
-    const url = streamUrl(song.filename);
     const dur = song.duration > 0 ? song.duration : undefined;
+    const url = await resolvePlaybackSrc(song.filename);
 
-    if (useCrossfade && crossfadeRef.current && audio.src && !audio.paused) {
-      isTransitioningRef.current = true;
-      nextAudio.src = url;
-      nextAudio.load();
-      nextAudio.volume = 0;
+    try {
+      if (
+        useCrossfade &&
+        crossfadeRef.current &&
+        audio.src &&
+        !audio.paused &&
+        !isStale()
+      ) {
+        isTransitioningRef.current = true;
+        nextAudio.src = url;
+        nextAudio.load();
+        nextAudio.volume = 0;
 
-      await new Promise((resolve) => {
-        const onReady = () => {
-          nextAudio.removeEventListener('canplay', onReady);
-          resolve();
-        };
-        if (nextAudio.readyState >= 2) resolve();
-        else nextAudio.addEventListener('canplay', onReady);
-      });
+        await waitAudioReady(nextAudio);
 
-      await Promise.all([
-        fadeVolume(audio, audio.volume, 0, CROSSFADE_SEC * 1000),
-        (async () => {
-          await nextAudio.play();
-          await fadeVolume(nextAudio, 0, targetVol, CROSSFADE_SEC * 1000);
-        })(),
-      ]);
+        if (isStale()) return;
 
-      audio.pause();
-      audio.src = nextAudio.src;
-      audio.currentTime = nextAudio.currentTime;
-      audio.volume = targetVol;
-      await audio.play();
-      nextAudio.pause();
-      nextAudio.src = '';
-      isTransitioningRef.current = false;
-    } else {
-      audio.pause();
-      audio.src = url;
-      audio.load();
-      audio.volume = targetVol;
-      await audio.play();
+        await Promise.all([
+          fadeVolume(audio, audio.volume, 0, CROSSFADE_SEC * 1000),
+          (async () => {
+            if (isStale()) return;
+            await safePlay(nextAudio);
+            if (isStale()) return;
+            await fadeVolume(nextAudio, 0, targetVol, CROSSFADE_SEC * 1000);
+          })(),
+        ]);
+
+        if (isStale()) return;
+
+        audio.pause();
+        audio.src = nextAudio.src;
+        audio.currentTime = nextAudio.currentTime;
+        audio.volume = targetVol;
+        await safePlay(audio);
+        nextAudio.pause();
+        nextAudio.removeAttribute('src');
+        nextAudio.load();
+      } else {
+        if (isStale()) return;
+        if (audio.src !== url) audio.src = url;
+        audio.volume = targetVol;
+        const started = await safePlay(audio);
+        if (!started && isStale()) return;
+        if (!started) {
+          setIsPlaying(false);
+          return;
+        }
+      }
+
+      if (isStale()) return;
+
+      if (dur) setDuration(dur);
+      setIsPlaying(true);
+      setError(null);
+
+      if (!url.startsWith('blob:')) {
+        cacheTrackInBackground(song.filename);
+      }
+      if (prefetchEnabledRef.current) prefetchNextInQueue();
+    } catch (err) {
+      if (!isStale()) {
+        console.error(err);
+        setError('Error al reproducir el audio');
+        setIsPlaying(false);
+      }
+    } finally {
+      if (!isStale()) isTransitioningRef.current = false;
     }
-
-    if (dur) setDuration(dur);
-    setIsPlaying(true);
-    setError(null);
-  }, [volume, fadeVolume]);
+  }, [volume, fadeVolume, resolvePlaybackSrc, prefetchNextInQueue]);
 
   const playAtIndex = useCallback((index, withCrossfade = false) => {
     const q = queueRef.current;
@@ -208,16 +296,23 @@ export function usePlayer() {
   }, [getNextIndex, playAtIndex]);
 
   const playNow = useCallback((song) => {
-    const all = songsRef.current;
-    const rest = shuffleRef.current
-      ? shuffleArray(all.filter((s) => s.filename !== song.filename))
-      : all.filter((s) => s.filename !== song.filename);
-    const newQueue = [song, ...rest];
-    setQueue(newQueue);
-    queueRef.current = newQueue;
+    setQueue([song]);
+    queueRef.current = [song];
     setQueueIndex(0);
     queueIndexRef.current = 0;
     loadAndPlay(song, false);
+
+    const buildRest = () => {
+      const all = songsRef.current;
+      const rest = shuffleRef.current
+        ? shuffleArray(all.filter((s) => s.filename !== song.filename))
+        : all.filter((s) => s.filename !== song.filename);
+      const fullQueue = [song, ...rest];
+      setQueue(fullQueue);
+      queueRef.current = fullQueue;
+    };
+    if (typeof queueMicrotask === 'function') queueMicrotask(buildRest);
+    else setTimeout(buildRest, 0);
   }, [loadAndPlay]);
 
   const playNext = useCallback((song) => {
@@ -277,9 +372,10 @@ export function usePlayer() {
   const handlePlayPause = useCallback(() => {
     const audio = audioRef.current;
     if (isPlaying) {
+      cancelPendingPlayback();
       audio.pause();
     } else if (currentSong) {
-      audio.play().catch(console.error);
+      safePlay(audio);
     } else if (queue.length > 0) {
       playAtIndex(0, false);
     } else if (songs.length > 0) {
@@ -296,8 +392,8 @@ export function usePlayer() {
     }
     const idx = queueIndexRef.current;
     const q = queueRef.current;
-    if (idx > 0) playAtIndex(idx - 1, crossfadeRef.current);
-    else if (loopRef.current === 'all' && q.length > 0) playAtIndex(q.length - 1, crossfadeRef.current);
+    if (idx > 0) playAtIndex(idx - 1, false);
+    else if (loopRef.current === 'all' && q.length > 0) playAtIndex(q.length - 1, false);
   }, [playAtIndex]);
 
   const handleSeek = useCallback((time) => {
@@ -326,7 +422,7 @@ export function usePlayer() {
     const onEnded = () => {
       if (loopRef.current === 'one') {
         audio.currentTime = 0;
-        audio.play().catch(console.error);
+        safePlay(audio);
         return;
       }
       advance(true);
@@ -392,13 +488,13 @@ export function usePlayer() {
     navigator.mediaSession.playbackState = isPlaying ? 'playing' : 'paused';
 
     navigator.mediaSession.setActionHandler('play', () => {
-      audioRef.current.play().catch(console.error);
+      safePlay(audioRef.current);
     });
     navigator.mediaSession.setActionHandler('pause', () => {
       audioRef.current.pause();
     });
     navigator.mediaSession.setActionHandler('previoustrack', () => handlePrevious());
-    navigator.mediaSession.setActionHandler('nexttrack', () => advance(true));
+    navigator.mediaSession.setActionHandler('nexttrack', () => advance(false));
 
     return () => {
       if (coverBlobRef.current) URL.revokeObjectURL(coverBlobRef.current);
@@ -431,7 +527,7 @@ export function usePlayer() {
     reorderQueue,
     handlePlayPause,
     handlePrevious,
-    advance: () => advance(true),
+    advance: (withCrossfade = false) => advance(withCrossfade),
     handleSeek,
     playAtIndex,
   };

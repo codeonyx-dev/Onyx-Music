@@ -13,23 +13,6 @@ import (
 	"github.com/gofiber/fiber/v2/middleware/logger"
 )
 
-var (
-	musicDir string
-	port     string
-)
-
-func init() {
-	musicDir = envOr("MUSIC_DIR", "./music")
-	port = envOr("PORT", "9090")
-}
-
-func envOr(key, fallback string) string {
-	if v := os.Getenv(key); v != "" {
-		return v
-	}
-	return fallback
-}
-
 type Song struct {
 	Filename string  `json:"filename"`
 	Title    string  `json:"title"`
@@ -40,6 +23,8 @@ type Song struct {
 }
 
 func main() {
+	loadConfig()
+
 	app := fiber.New(fiber.Config{
 		ErrorHandler: func(c *fiber.Ctx, err error) error {
 			code := fiber.StatusInternalServerError
@@ -62,6 +47,8 @@ func main() {
 
 	app.Post("/api/auth/login", handleLogin)
 
+	app.Get("/api/settings", handleSettings)
+
 	api := app.Group("/api", authMiddleware)
 	api.Get("/auth/me", handleMe)
 	api.Get("/songs", handleGetSongs)
@@ -70,16 +57,16 @@ func main() {
 
 	app.Get("/health", handleHealth)
 
-	log.Printf("Onyx API en http://0.0.0.0:%s", port)
-	log.Printf("Directorio de música: %s", musicDir)
-	log.Fatal(app.Listen(":" + port))
+	log.Printf("Onyx API en http://0.0.0.0:%s", cfg.Port)
+	log.Printf("Directorio de música: %s", cfg.MusicDir)
+	log.Fatal(app.Listen(":" + cfg.Port))
 }
 
 func handleHealth(c *fiber.Ctx) error {
 	return c.JSON(fiber.Map{
 		"status":    "ok",
-		"port":      port,
-		"music_dir": musicDir,
+		"port":      cfg.Port,
+		"music_dir": cfg.MusicDir,
 	})
 }
 
@@ -92,20 +79,12 @@ func handleGetSongs(c *fiber.Ctx) error {
 	return c.JSON(fiber.Map{"songs": songs})
 }
 
-func handleStream(c *fiber.Ctx) error {
-	filePath, err := resolveRequestFile(c)
-	if err != nil {
-		return c.Status(400).JSON(fiber.Map{"error": err.Error()})
-	}
-
-	if _, err := os.Stat(filePath); err != nil {
-		if os.IsNotExist(err) {
-			return c.Status(404).JSON(fiber.Map{"error": "Archivo no encontrado"})
-		}
-		return c.Status(500).JSON(fiber.Map{"error": "Error al acceder al archivo"})
-	}
-
-	return c.SendFile(filePath)
+func handleSettings(c *fiber.Ctx) error {
+	return c.JSON(fiber.Map{
+		"prefetch_next":      cfg.PrefetchNext,
+		"crossfade_default":  cfg.CrossfadeDefault,
+		"audio_cache_enabled": true,
+	})
 }
 
 func handleCover(c *fiber.Ctx) error {
@@ -116,13 +95,13 @@ func handleCover(c *fiber.Ctx) error {
 
 	if data, mime, ok := embeddedCover(filePath); ok {
 		c.Set("Content-Type", mime)
-		c.Set("Cache-Control", "public, max-age=86400")
+		c.Set("Cache-Control", "public, max-age=604800, immutable")
 		return c.Send(data)
 	}
 
 	if data, mime, ok := sidecarCover(filePath); ok {
 		c.Set("Content-Type", mime)
-		c.Set("Cache-Control", "public, max-age=86400")
+		c.Set("Cache-Control", "public, max-age=604800, immutable")
 		return c.Send(data)
 	}
 
@@ -149,9 +128,9 @@ func safeFilePath(filename string) (string, error) {
 		return "", fiber.NewError(fiber.StatusBadRequest, "Nombre de archivo inválido")
 	}
 
-	filePath := filepath.Join(musicDir, filename)
+	filePath := filepath.Join(cfg.MusicDir, filename)
 
-	absMusicDir, err := filepath.Abs(musicDir)
+	absMusicDir, err := filepath.Abs(cfg.MusicDir)
 	if err != nil {
 		return "", fiber.NewError(fiber.StatusInternalServerError, "Error de configuración")
 	}

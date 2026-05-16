@@ -14,7 +14,6 @@ backend/server.exe
 .env
 .env.local
 .env.*.local
-deploy/openmediavault/.env
 
 # Música (no subir tu biblioteca personal)
 music/*
