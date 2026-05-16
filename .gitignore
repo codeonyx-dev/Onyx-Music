@@ -1,0 +1,48 @@
+# Dependencias y builds
+node_modules/
+frontend/build/
+frontend/.eslintcache
+frontend/coverage/
+
+# Go
+backend/server
+backend/server.exe
+*.exe
+*.test
+
+# Entorno y secretos
+.env
+.env.local
+.env.*.local
+deploy/openmediavault/.env
+
+# Música (no subir tu biblioteca personal)
+music/*
+!music/.gitkeep
+
+# Copias sueltas en la raíz del repo (los oficiales están en frontend/public/assets/)
+/Logo.png
+/Fondo.png
+/logo.png
+/fondo.png
+/fondo.jpg
+
+# Sistema e IDE
+.DS_Store
+Thumbs.db
+desktop.ini
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Caché local de metadatos
+data/cache/
+
+# Logs
+*.log
+npm-debug.log*
+
+# Cursor / agentes (opcional)
+.cursor/
