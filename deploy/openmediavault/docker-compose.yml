@@ -1,0 +1,47 @@
+# Onyx Music Player — OpenMediaVault / NAS
+# Los Dockerfiles están en ../../backend y ../../frontend
+# Copia .env.example a .env y define MUSIC_PATH con ruta absoluta en el NAS.
+
+name: onyx-music-player
+
+services:
+  backend:
+    build:
+      context: ../../backend
+      dockerfile: Dockerfile
+    container_name: onyx-backend
+    restart: unless-stopped
+    volumes:
+      - ${MUSIC_PATH:?Define MUSIC_PATH en .env (ruta absoluta en el NAS)}:/music:ro
+      - onyx-cache:/cache
+    environment:
+      PORT: ${PORT:-9090}
+      MUSIC_DIR: /music
+      CACHE_DIR: /cache
+      ONYX_USER: ${ONYX_USER:-admin}
+      ONYX_PASSWORD: ${ONYX_PASSWORD:-onyx123}
+      JWT_SECRET: ${JWT_SECRET:-onyx-change-this-secret-in-production}
+    networks:
+      - onyx-network
+
+  frontend:
+    build:
+      context: ../../frontend
+      dockerfile: Dockerfile
+      args:
+        REACT_APP_API_URL: ${REACT_APP_API_URL:-}
+    container_name: onyx-frontend
+    restart: unless-stopped
+    ports:
+      - "${FRONTEND_PORT:-4000}:80"
+    depends_on:
+      - backend
+    networks:
+      - onyx-network
+
+networks:
+  onyx-network:
+    driver: bridge
+
+volumes:
+  onyx-cache:
